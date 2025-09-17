@@ -86,7 +86,7 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gradient-to-br from-purple-50 via-white to-purple-50 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         <CardTitle className="text-4xl font-bold text-center py-4">Jera</CardTitle>
         <Card className="shadow-lg border-0">
@@ -178,9 +178,9 @@ export default function LoginPage() {
             </form>
 
             {/* Demo Credentials */}
-            {/* <div className="mt-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
-              <p className="text-sm font-medium text-blue-800 mb-2">Credenciais de Demonstração:</p>
-              <div className="text-sm text-blue-700 space-y-1">
+            {/* <div className="mt-6 p-4 bg-purple-50 rounded-lg border border-purple-200">
+              <p className="text-sm font-medium text-purple-800 mb-2">Credenciais de Demonstração:</p>
+              <div className="text-sm text-purple-700 space-y-1">
                 <p>
                   <strong>Email:</strong> admin@projecthub.com
                 </p>
@@ -194,7 +194,7 @@ export default function LoginPage() {
             <div className="mt-6 text-center">
               <p className="text-sm text-gray-600">
                 Não tem uma conta?{" "}
-                <Link href="/register" className="text-blue-600 hover:text-blue-800 hover:underline font-medium">
+                <Link href="/register" className="text-purple-600 hover:text-purple-800 hover:underline font-medium" style={{color: '#642CA9'}}>
                   Cadastre-se aqui
                 </Link>
               </p>
