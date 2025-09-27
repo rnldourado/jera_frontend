@@ -1,155 +1,214 @@
 "use client"
 
 import { useState } from "react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import {
+  Plus,
+  Search,
+  Filter,
+  Edit,
+  Trash2,
+  Mail,
+  Users as UsersIcon,
+  User as UserIcon,
+  Eye,
+} from "lucide-react"
+
 import { Button } from "@/components/ui/button"
+import { Card, CardContent } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Input } from "@/components/ui/input"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
-import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { Users, Plus, Search, Filter, MoreHorizontal, Mail, Phone, Calendar } from "lucide-react"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
 import { Sidebar } from "@/components/sidebar"
 import { ProtectedPage } from "@/components/protected-page"
+import { useUsers } from "@/hooks/use-api"
+import { useAuth } from "@/hooks/use-auth"
+import { apiClient } from "@/lib/api"
+import { User, CreateUserRequest } from "@/lib/types"
+
+interface UserFormData {
+  name: string
+  username: string
+  email: string
+  password: string
+}
 
 export default function UsersPage() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [searchTerm, setSearchTerm] = useState("")
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
+  const [selectedUser, setSelectedUser] = useState<User | null>(null)
+  const [isCreating, setIsCreating] = useState(false)
+  const [isEditing, setIsEditing] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
 
-  const users = [
-    {
-      id: 1,
-      name: "João Silva",
-      email: "joao.silva@empresa.com",
-      role: "Desenvolvedor Full Stack",
-      department: "Tecnologia",
-      status: "Ativo",
-      avatar: "/placeholder.svg?height=64&width=64",
-      joinDate: "2023-01-15",
-      projectsCount: 3,
-      tasksCompleted: 45,
-      phone: "+55 11 99999-0001",
-    },
-    {
-      id: 2,
-      name: "Maria Santos",
-      email: "maria.santos@empresa.com",
-      role: "UI/UX Designer",
-      department: "Design",
-      status: "Ativo",
-      avatar: "/placeholder.svg?height=64&width=64",
-      joinDate: "2023-02-20",
-      projectsCount: 2,
-      tasksCompleted: 32,
-      phone: "+55 11 99999-0002",
-    },
-    {
-      id: 3,
-      name: "Pedro Costa",
-      email: "pedro.costa@empresa.com",
-      role: "DevOps Engineer",
-      department: "Tecnologia",
-      status: "Ativo",
-      avatar: "/placeholder.svg?height=64&width=64",
-      joinDate: "2023-03-10",
-      projectsCount: 4,
-      tasksCompleted: 28,
-      phone: "+55 11 99999-0003",
-    },
-    {
-      id: 4,
-      name: "Ana Lima",
-      email: "ana.lima@empresa.com",
-      role: "Product Manager",
-      department: "Produto",
-      status: "Ativo",
-      avatar: "/placeholder.svg?height=64&width=64",
-      joinDate: "2022-11-05",
-      projectsCount: 5,
-      tasksCompleted: 67,
-      phone: "+55 11 99999-0004",
-    },
-    {
-      id: 5,
-      name: "Carlos Oliveira",
-      email: "carlos.oliveira@empresa.com",
-      role: "Desenvolvedor Mobile",
-      department: "Tecnologia",
-      status: "Férias",
-      avatar: "/placeholder.svg?height=64&width=64",
-      joinDate: "2023-04-12",
-      projectsCount: 2,
-      tasksCompleted: 19,
-      phone: "+55 11 99999-0005",
-    },
-    {
-      id: 6,
-      name: "Fernanda Costa",
-      email: "fernanda.costa@empresa.com",
-      role: "QA Analyst",
-      department: "Qualidade",
-      status: "Ativo",
-      avatar: "/placeholder.svg?height=64&width=64",
-      joinDate: "2023-05-18",
-      projectsCount: 3,
-      tasksCompleted: 41,
-      phone: "+55 11 99999-0006",
-    },
-  ]
+  const [formData, setFormData] = useState<UserFormData>({
+    name: "",
+    username: "",
+    email: "",
+    password: ""
+  })
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "Ativo":
-        return "bg-green-100 text-green-800"
-      case "Inativo":
-        return "bg-red-100 text-red-800"
-      case "Férias":
-        return "bg-yellow-100 text-yellow-800"
-      case "Licença":
-        return "bg-blue-100 text-blue-800"
-      default:
-        return "bg-gray-100 text-gray-800"
+  const { user: currentUser } = useAuth()
+  const { data: users, loading, error, refetch } = useUsers()
+
+  const resetForm = () => {
+    setFormData({
+      name: "",
+      username: "",
+      email: "",
+      password: ""
+    })
+    setSelectedUser(null)
+  }
+
+  const handleCreateUser = async () => {
+    if (!formData.name.trim() || !formData.username.trim() || !formData.email.trim() || !formData.password.trim()) {
+      alert("Por favor, preencha todos os campos obrigatórios.")
+      return
+    }
+
+    setIsCreating(true)
+    try {
+      const userData: CreateUserRequest = {
+        name: formData.name,
+        username: formData.username,
+        email: formData.email,
+        password: formData.password
+      }
+
+      await apiClient.createUser(userData)
+      
+      setIsCreateModalOpen(false)
+      resetForm()
+      refetch()
+      alert("Usuário criado com sucesso!")
+    } catch (error: any) {
+      console.error('Erro ao criar usuário:', error)
+      const errorMessage = error.response?.data?.message || error.message || "Erro desconhecido"
+      alert(`Erro ao criar usuário: ${errorMessage}`)
+    } finally {
+      setIsCreating(false)
     }
   }
 
-  const getDepartmentColor = (department: string) => {
-    switch (department) {
-      case "Tecnologia":
-        return "bg-blue-100 text-blue-800"
-      case "Design":
-        return "bg-purple-100 text-purple-800"
-      case "Produto":
-        return "bg-green-100 text-green-800"
-      case "Qualidade":
-        return "bg-orange-100 text-orange-800"
-      default:
-        return "bg-gray-100 text-gray-800"
+  const handleEditUser = async () => {
+    if (!selectedUser || !formData.name.trim() || !formData.username.trim() || !formData.email.trim()) {
+      alert("Por favor, preencha todos os campos obrigatórios.")
+      return
+    }
+
+    setIsEditing(true)
+    try {
+      const userData = {
+        name: formData.name,
+        username: formData.username,
+        email: formData.email
+      }
+
+      await apiClient.updateUser(selectedUser.id, userData)
+      
+      resetForm()
+      refetch()
+      alert("Usuário atualizado com sucesso!")
+    } catch (error: any) {
+      console.error('Erro ao atualizar usuário:', error)
+      const errorMessage = error.response?.data?.message || error.message || "Erro desconhecido"
+      alert(`Erro ao atualizar usuário: ${errorMessage}`)
+    } finally {
+      setIsEditing(false)
     }
   }
 
-  const filteredUsers = users.filter(
-    (user) =>
+  const handleDeleteUser = async (userId: number) => {
+    if (userId === currentUser?.id) {
+      alert("Você não pode excluir sua própria conta!")
+      return
+    }
+
+    setIsDeleting(true)
+    try {
+      await apiClient.deleteUser(userId)
+      refetch()
+      alert("Usuário excluído com sucesso!")
+    } catch (error: any) {
+      console.error('Erro ao excluir usuário:', error)
+      const errorMessage = error.response?.data?.message || error.message || "Erro desconhecido"
+      alert(`Erro ao excluir usuário: ${errorMessage}`)
+    } finally {
+      setIsDeleting(false)
+    }
+  }
+
+  const filteredUsers = users?.filter((user) => {
+    const matchesSearch =
       user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      user.role.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      user.department.toLowerCase().includes(searchTerm.toLowerCase()),
-  )
+      user.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      user.email.toLowerCase().includes(searchTerm.toLowerCase())
+
+    return matchesSearch
+  }) || []
 
   const userStats = {
-    total: users.length,
-    active: users.filter((u) => u.status === "Ativo").length,
-    onLeave: users.filter((u) => u.status === "Férias" || u.status === "Licença").length,
-    departments: [...new Set(users.map((u) => u.department))].length,
+    total: users?.length || 0,
+    active: users?.length || 0,
+  }
+
+  if (loading) {
+    return (
+      <ProtectedPage>
+        <div className="flex h-screen bg-gray-50">
+          <Sidebar open={sidebarOpen} setOpen={setSidebarOpen} />
+          <div className="flex-1 flex items-center justify-center">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600"></div>
+              <p className="mt-4 text-gray-600">Carregando usuários...</p>
+            </div>
+          </div>
+        </div>
+      </ProtectedPage>
+    )
+  }
+
+  if (error) {
+    return (
+      <ProtectedPage>
+        <div className="flex h-screen bg-gray-50">
+          <Sidebar open={sidebarOpen} setOpen={setSidebarOpen} />
+          <div className="flex-1 flex items-center justify-center">
+            <div className="text-center">
+              <p className="text-red-600 mb-4">Erro ao carregar usuários: {error}</p>
+              <Button onClick={refetch}>Tentar novamente</Button>
+            </div>
+          </div>
+        </div>
+      </ProtectedPage>
+    )
   }
 
   return (
@@ -160,203 +219,285 @@ export default function UsersPage() {
         <div className="flex-1 flex flex-col overflow-hidden">
           <main className="flex-1 overflow-x-hidden overflow-y-auto bg-gray-50">
             <div className="container mx-auto px-6 py-8">
-              <div className="flex justify-between items-center mb-8">
-                <div>
-                  <h1 className="text-3xl font-bold text-gray-900">Usuários</h1>
-                  <p className="text-gray-600 mt-2">Gerencie os usuários da sua equipe</p>
-                </div>
-                <Dialog>
-                  <DialogTrigger asChild>
-                    <Button>
-                      <Plus className="h-4 w-4 mr-2" />
-                      Novo Usuário
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent className="sm:max-w-[425px]">
-                    <DialogHeader>
-                      <DialogTitle>Adicionar Novo Usuário</DialogTitle>
-                      <DialogDescription>Preencha as informações do novo usuário</DialogDescription>
-                    </DialogHeader>
-                    <div className="grid gap-4 py-4">
-                      <div className="grid gap-2">
-                        <Label htmlFor="user-name">Nome Completo</Label>
-                        <Input id="user-name" placeholder="Digite o nome completo" />
-                      </div>
-                      <div className="grid gap-2">
-                        <Label htmlFor="user-email">Email</Label>
-                        <Input id="user-email" type="email" placeholder="email@empresa.com" />
-                      </div>
-                      <div className="grid gap-2">
-                        <Label htmlFor="user-phone">Telefone</Label>
-                        <Input id="user-phone" placeholder="+55 11 99999-0000" />
-                      </div>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="grid gap-2">
-                          <Label htmlFor="user-role">Cargo</Label>
-                          <Input id="user-role" placeholder="Ex: Desenvolvedor" />
-                        </div>
-                        <div className="grid gap-2">
-                          <Label htmlFor="user-department">Departamento</Label>
-                          <Select>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Selecione" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="tecnologia">Tecnologia</SelectItem>
-                              <SelectItem value="design">Design</SelectItem>
-                              <SelectItem value="produto">Produto</SelectItem>
-                              <SelectItem value="qualidade">Qualidade</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      </div>
-                    </div>
-                    <DialogFooter>
-                      <Button type="submit">Adicionar Usuário</Button>
-                    </DialogFooter>
-                  </DialogContent>
-                </Dialog>
-              </div>
-
-              {/* Stats Cards */}
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-                <Card>
-                  <CardContent className="p-6">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-medium text-gray-600">Total de Usuários</p>
-                        <p className="text-2xl font-bold">{userStats.total}</p>
-                      </div>
-                      <Users className="h-8 w-8 text-gray-400" />
-                    </div>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardContent className="p-6">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-medium text-gray-600">Usuários Ativos</p>
-                        <p className="text-2xl font-bold text-green-600">{userStats.active}</p>
-                      </div>
-                      <Users className="h-8 w-8 text-green-400" />
-                    </div>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardContent className="p-6">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-medium text-gray-600">Em Licença/Férias</p>
-                        <p className="text-2xl font-bold text-yellow-600">{userStats.onLeave}</p>
-                      </div>
-                      <Users className="h-8 w-8 text-yellow-400" />
-                    </div>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardContent className="p-6">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-medium text-gray-600">Departamentos</p>
-                        <p className="text-2xl font-bold text-blue-600">{userStats.departments}</p>
-                      </div>
-                      <Users className="h-8 w-8 text-blue-400" />
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
-
-              {/* Search and Filter */}
-              <div className="flex gap-4 mb-6">
-                <div className="relative flex-1">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                  <Input
-                    placeholder="Buscar usuários..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-10"
-                  />
-                </div>
-                <Button variant="outline">
-                  <Filter className="h-4 w-4 mr-2" />
-                  Filtros
-                </Button>
-              </div>
-
-              {/* Users Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {filteredUsers.map((user) => (
-                  <Card key={user.id} className="hover:shadow-lg transition-shadow">
-                    <CardHeader>
-                      <div className="flex items-start justify-between">
-                        <div className="flex items-center gap-4">
-                          <Avatar className="h-16 w-16">
-                            <AvatarImage src={user.avatar || "/placeholder.svg"} />
-                            <AvatarFallback className="text-lg">
-                              {user.name
-                                .split(" ")
-                                .map((n) => n[0])
-                                .join("")}
-                            </AvatarFallback>
-                          </Avatar>
-                          <div className="flex-1">
-                            <CardTitle className="text-lg">{user.name}</CardTitle>
-                            <CardDescription className="mt-1">{user.role}</CardDescription>
-                          </div>
-                        </div>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon">
-                              <MoreHorizontal className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem>Ver Perfil</DropdownMenuItem>
-                            <DropdownMenuItem>Editar</DropdownMenuItem>
-                            <DropdownMenuItem>Desativar</DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </div>
-                    </CardHeader>
-                    <CardContent>
+              <div className="mb-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h1 className="text-2xl font-semibold text-gray-900">Usuários</h1>
+                  <Dialog open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen}>
+                    <DialogTrigger asChild>
+                      <Button>
+                        <Plus className="h-4 w-4 mr-2" />
+                        Criar Usuário
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent className="max-w-md">
+                      <DialogHeader>
+                        <DialogTitle>Criar Novo Usuário</DialogTitle>
+                      </DialogHeader>
                       <div className="space-y-4">
-                        {/* Status and Department */}
-                        <div className="flex items-center justify-between">
-                          <Badge className={getStatusColor(user.status)}>{user.status}</Badge>
-                          <Badge className={getDepartmentColor(user.department)}>{user.department}</Badge>
+                        <div>
+                          <Label htmlFor="name">Nome Completo</Label>
+                          <Input
+                            id="name"
+                            value={formData.name}
+                            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                            placeholder="Digite o nome completo"
+                            required
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="username">Nome de Usuário</Label>
+                          <Input
+                            id="username"
+                            value={formData.username}
+                            onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+                            placeholder="Digite o nome de usuário"
+                            required
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="email">Email</Label>
+                          <Input
+                            id="email"
+                            type="email"
+                            value={formData.email}
+                            onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                            placeholder="email@exemplo.com"
+                            required
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="password">Senha</Label>
+                          <Input
+                            id="password"
+                            type="password"
+                            value={formData.password}
+                            onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                            placeholder="Digite a senha"
+                            required
+                          />
+                        </div>
+                      </div>
+                      <div className="flex justify-end space-x-2 mt-6">
+                        <Button
+                          variant="outline"
+                          onClick={() => setIsCreateModalOpen(false)}
+                          disabled={isCreating}
+                        >
+                          Cancelar
+                        </Button>
+                        <Button onClick={handleCreateUser} disabled={isCreating}>
+                          {isCreating ? "Criando..." : "Criar"}
+                        </Button>
+                      </div>
+                    </DialogContent>
+                  </Dialog>
+                </div>
+
+                {/* Stats Cards */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                  <Card>
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-muted-foreground">Total de Usuários</p>
+                          <p className="text-2xl font-bold">{userStats.total}</p>
+                        </div>
+                        <UsersIcon className="h-8 w-8 text-muted-foreground" />
+                      </div>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-muted-foreground">Usuários Ativos</p>
+                          <p className="text-2xl font-bold text-green-600">{userStats.active}</p>
+                        </div>
+                        <UsersIcon className="h-8 w-8 text-green-600" />
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Search */}
+                <div className="flex gap-4 mb-6">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+                    <Input
+                      placeholder="Buscar usuários..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="pl-10"
+                    />
+                  </div>
+                  <Button variant="outline">
+                    <Filter className="h-4 w-4 mr-2" />
+                    Mais Filtros
+                  </Button>
+                </div>
+
+                {/* Users List */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {filteredUsers.map((user) => (
+                    <Card key={user.id} className="hover:shadow-md transition-shadow">
+                      <CardContent className="p-6">
+                        <div className="flex items-center justify-between mb-4">
+                          <div className="flex items-center gap-3">
+                            <Avatar className="h-12 w-12">
+                              <AvatarImage src="/placeholder-user.jpg" />
+                              <AvatarFallback className="bg-blue-100 text-blue-600">
+                                {user.name
+                                  .split(" ")
+                                  .map((n) => n[0])
+                                  .join("")
+                                  .substring(0, 2)}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div>
+                              <h3 className="font-semibold text-lg">{user.name}</h3>
+                              <p className="text-sm text-gray-500">@{user.username}</p>
+                            </div>
+                          </div>
+                          <Badge className="bg-green-100 text-green-800">Ativo</Badge>
                         </div>
 
-                        {/* Contact Info */}
-                        <div className="space-y-2">
+                        <div className="space-y-2 mb-4">
                           <div className="flex items-center gap-2 text-sm text-gray-600">
                             <Mail className="h-4 w-4" />
                             <span className="truncate">{user.email}</span>
                           </div>
                           <div className="flex items-center gap-2 text-sm text-gray-600">
-                            <Phone className="h-4 w-4" />
-                            <span>{user.phone}</span>
-                          </div>
-                          <div className="flex items-center gap-2 text-sm text-gray-600">
-                            <Calendar className="h-4 w-4" />
-                            <span>Desde {new Date(user.joinDate).toLocaleDateString("pt-BR")}</span>
+                            <UserIcon className="h-4 w-4" />
+                            <span>ID: {user.id}</span>
                           </div>
                         </div>
 
-                        {/* Stats */}
-                        <div className="grid grid-cols-2 gap-4 pt-4 border-t">
-                          <div className="text-center">
-                            <div className="text-lg font-bold text-blue-600">{user.projectsCount}</div>
-                            <div className="text-xs text-gray-600">Projetos</div>
-                          </div>
-                          <div className="text-center">
-                            <div className="text-lg font-bold text-green-600">{user.tasksCompleted}</div>
-                            <div className="text-xs text-gray-600">Tarefas</div>
-                          </div>
+                        <div className="flex gap-2 mt-4">
+                          <Dialog>
+                            <DialogTrigger asChild>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="flex-1"
+                                onClick={() => {
+                                  setSelectedUser(user)
+                                  setFormData({
+                                    name: user.name,
+                                    username: user.username,
+                                    email: user.email,
+                                    password: ""
+                                  })
+                                }}
+                              >
+                                <Edit className="h-4 w-4 mr-2" />
+                                Editar
+                              </Button>
+                            </DialogTrigger>
+                            <DialogContent className="max-w-md">
+                              <DialogHeader>
+                                <DialogTitle>Editar Usuário</DialogTitle>
+                              </DialogHeader>
+                              <div className="space-y-4">
+                                <div>
+                                  <Label htmlFor="edit-name">Nome Completo</Label>
+                                  <Input
+                                    id="edit-name"
+                                    value={formData.name}
+                                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                                    placeholder="Digite o nome completo"
+                                    required
+                                  />
+                                </div>
+                                <div>
+                                  <Label htmlFor="edit-username">Nome de Usuário</Label>
+                                  <Input
+                                    id="edit-username"
+                                    value={formData.username}
+                                    onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+                                    placeholder="Digite o nome de usuário"
+                                    required
+                                  />
+                                </div>
+                                <div>
+                                  <Label htmlFor="edit-email">Email</Label>
+                                  <Input
+                                    id="edit-email"
+                                    type="email"
+                                    value={formData.email}
+                                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                                    placeholder="email@exemplo.com"
+                                    required
+                                  />
+                                </div>
+                              </div>
+                              <div className="flex justify-end space-x-2 mt-6">
+                                <Button variant="outline" onClick={resetForm}>Cancelar</Button>
+                                <Button onClick={handleEditUser} disabled={isEditing}>
+                                  {isEditing ? "Salvando..." : "Salvar"}
+                                </Button>
+                              </div>
+                            </DialogContent>
+                          </Dialog>
+
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="text-red-600 hover:text-red-700"
+                                disabled={user.id === currentUser?.id}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Excluir Usuário</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  Tem certeza que deseja excluir o usuário "{user.name}"? Esta ação não pode ser desfeita.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                <AlertDialogAction
+                                  onClick={() => handleDeleteUser(user.id)}
+                                  disabled={isDeleting}
+                                  className="bg-red-600 hover:bg-red-700"
+                                >
+                                  {isDeleting ? "Excluindo..." : "Excluir"}
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
                         </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
+                      </CardContent>
+                    </Card>
+                  ))}
+
+                  {filteredUsers.length === 0 && (
+                    <div className="col-span-full">
+                      <Card>
+                        <CardContent className="p-8 text-center">
+                          <UsersIcon className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                          <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                            Nenhum usuário encontrado
+                          </h3>
+                          <p className="text-gray-600 mb-4">
+                            {searchTerm
+                              ? "Tente ajustar os termos de busca."
+                              : "Crie seu primeiro usuário para começar."}
+                          </p>
+                          {!searchTerm && (
+                            <Button onClick={() => setIsCreateModalOpen(true)}>
+                              <Plus className="h-4 w-4 mr-2" />
+                              Criar Primeiro Usuário
+                            </Button>
+                          )}
+                        </CardContent>
+                      </Card>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </main>

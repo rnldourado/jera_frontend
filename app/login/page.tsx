@@ -9,21 +9,23 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Eye, EyeOff, Lock, Mail, AlertCircle, Loader2 } from "lucide-react"
+import { AlertCircle, Loader2 } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
+import { apiClient } from "@/lib/api"
+import { useAuth } from "@/hooks/use-auth"
 
 export default function LoginPage() {
-  const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [rememberMe, setRememberMe] = useState(false)
   const [error, setError] = useState("")
   const [formData, setFormData] = useState({
-    email: "",
+    username: "",
     password: "",
   })
 
   const router = useRouter()
+  const { login, refreshUser } = useAuth()
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target
@@ -31,25 +33,16 @@ export default function LoginPage() {
       ...prev,
       [name]: value,
     }))
-    // Limpar erro quando usuário começar a digitar
     if (error) setError("")
   }
 
   const validateForm = () => {
-    if (!formData.email) {
-      setError("Email é obrigatório")
-      return false
-    }
-    if (!formData.email.includes("@")) {
-      setError("Email inválido")
+    if (!formData.username) {
+      setError("Username é obrigatório")
       return false
     }
     if (!formData.password) {
       setError("Senha é obrigatória")
-      return false
-    }
-    if (formData.password.length < 6) {
-      setError("Senha deve ter pelo menos 6 caracteres")
       return false
     }
     return true
@@ -63,109 +56,129 @@ export default function LoginPage() {
     setIsLoading(true)
     setError("")
 
-    try {
-      // Simular chamada de API
-      await new Promise((resolve) => setTimeout(resolve, 2000))
+    console.log('=== TENTATIVA DE LOGIN ===')
+    console.log('FormData:', formData)
 
-      // Simular validação de credenciais
-      if (formData.email === "admin@projecthub.com" && formData.password === "123456") {
-        // Login bem-sucedido
-        localStorage.setItem("isAuthenticated", "true")
-        if (rememberMe) {
-          localStorage.setItem("rememberMe", "true")
-        }
-        router.push("/dashboard")
-      } else {
-        setError("Email ou senha incorretos")
+    try {
+      console.log('Chamando API login...')
+      const response = await apiClient.login({
+        username: formData.username,
+        password: formData.password,
+      })
+
+      console.log('Response da API:', response)
+
+      // Usar o hook useAuth para salvar usuário e token
+      console.log('Salvando dados no contexto...')
+      login(response.user, response.token)
+      
+      // Verificar se os dados foram salvos
+      console.log('Verificando localStorage após login...')
+      console.log('authToken:', localStorage.getItem('authToken'))
+      console.log('currentUser:', localStorage.getItem('currentUser'))
+      console.log('isAuthenticated:', localStorage.getItem('isAuthenticated'))
+      
+      // Forçar refresh dos dados
+      setTimeout(() => {
+        refreshUser()
+      }, 100)
+      
+      if (rememberMe) {
+        localStorage.setItem("rememberMe", "true")
       }
+
+      console.log('Redirecionando para dashboard...')
+      // Aguardar um pouco antes do redirect para garantir que o estado seja atualizado
+      setTimeout(() => {
+        console.log('Executando redirecionamento...')
+        router.push("/dashboard")
+      }, 300)
     } catch (err) {
-      setError("Erro ao fazer login. Tente novamente.")
+      console.error('Erro no login:', err)
+      setError(err instanceof Error ? err.message : "Erro ao fazer login. Tente novamente.")
     } finally {
       setIsLoading(false)
     }
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-50 via-white to-purple-50 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-[#E5E5E5] flex items-center justify-center p-4">
       <div className="w-full max-w-md">
-        <CardTitle className="text-4xl font-bold text-center py-4">Jera</CardTitle>
-        <Card className="shadow-lg border-0">
-          <CardHeader className="space-y-1 pb-6">
-            <CardTitle className="text-xl font-bold text-center">Entrar</CardTitle>
-            <CardDescription className="text-center">Digite suas credenciais para acessar o sistema</CardDescription>
+        {/* Logo/Header */}
+        <div className="text-center mb-8">
+          <h1 className="text-4xl font-black text-gray-900 mb-3">Jera</h1>
+          <p className="text-gray-600 text-base">Faça login para acessar sua conta</p>
+        </div>
+
+        <Card className="shadow-sm border-0 bg-white">
+          <CardHeader className="text-center pb-6">
+            <CardTitle className="text-2xl font-bold text-gray-900">Entrar</CardTitle>
+            <CardDescription className="text-gray-600 mt-2">
+              Digite suas credenciais para acessar o sistema
+            </CardDescription>
           </CardHeader>
-          <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-4">
+          <CardContent className="px-8 pb-8">
+            <form onSubmit={handleSubmit} className="space-y-6">
               {/* Error Alert */}
               {error && (
-                <Alert variant="destructive">
+                <Alert variant="destructive" className="border-red-200 bg-red-50">
                   <AlertCircle className="h-4 w-4" />
-                  <AlertDescription>{error}</AlertDescription>
+                  <AlertDescription className="text-red-800">{error}</AlertDescription>
                 </Alert>
               )}
 
-              {/* Email Field */}
+              {/* Username Field */}
               <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                  <Input
-                    id="email"
-                    name="email"
-                    type="email"
-                    placeholder="seu@email.com"
-                    value={formData.email}
-                    onChange={handleInputChange}
-                    className="pl-10"
-                    disabled={isLoading}
-                  />
-                </div>
+                <Label htmlFor="username" className="text-sm font-medium text-gray-700">
+                  Username
+                </Label>
+                <Input
+                  id="username"
+                  name="username"
+                  type="text"
+                  value={formData.username}
+                  onChange={handleInputChange}
+                  className="h-12 border-gray-200 focus:border-gray-300 focus:ring-1 focus:ring-gray-300"
+                  disabled={isLoading}
+                />
               </div>
 
               {/* Password Field */}
               <div className="space-y-2">
-                <Label htmlFor="password">Senha</Label>
-                <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                  <Input
-                    id="password"
-                    name="password"
-                    type={showPassword ? "text" : "password"}
-                    placeholder="Digite sua senha"
-                    value={formData.password}
-                    onChange={handleInputChange}
-                    className="pl-10 pr-10"
-                    disabled={isLoading}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                    disabled={isLoading}
-                  >
-                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </button>
-                </div>
+                <Label htmlFor="password" className="text-sm font-medium text-gray-700">
+                  Senha
+                </Label>
+                <Input
+                  id="password"
+                  name="password"
+                  type="password"
+                  value={formData.password}
+                  onChange={handleInputChange}
+                  className="h-12 border-gray-200 focus:border-gray-300 focus:ring-1 focus:ring-gray-300"
+                  disabled={isLoading}
+                />
               </div>
 
-              {/* Remember Me & Forgot Password */}
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id="remember"
-                    checked={rememberMe}
-                    onCheckedChange={(checked: boolean) => setRememberMe(checked as boolean)}
-                    disabled={isLoading}
-                  />
-                  <Label htmlFor="remember" className="text-sm text-gray-600">
-                    Lembrar de mim
-                  </Label>
-                </div>
-                
+              {/* Remember Me */}
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="remember"
+                  checked={rememberMe}
+                  onCheckedChange={(checked) => setRememberMe(checked as boolean)}
+                  disabled={isLoading}
+                  className="data-[state=checked]:bg-purple-600 data-[state=checked]:border-purple-600"
+                />
+                <Label htmlFor="remember" className="text-sm text-gray-700">
+                  Lembrar de mim
+                </Label>
               </div>
 
               {/* Login Button */}
-              <Button type="submit" className="w-full" disabled={isLoading}>
+              <Button
+                type="submit"
+                className="w-full h-12 bg-black hover:bg-gray-800 text-white font-medium rounded-lg"
+                disabled={isLoading}
+              >
                 {isLoading ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -177,25 +190,12 @@ export default function LoginPage() {
               </Button>
             </form>
 
-            {/* Demo Credentials */}
-            {/* <div className="mt-6 p-4 bg-purple-50 rounded-lg border border-purple-200">
-              <p className="text-sm font-medium text-purple-800 mb-2">Credenciais de Demonstração:</p>
-              <div className="text-sm text-purple-700 space-y-1">
-                <p>
-                  <strong>Email:</strong> admin@projecthub.com
-                </p>
-                <p>
-                  <strong>Senha:</strong> 123456
-                </p>
-              </div>
-            </div> */}
-
             {/* Footer Links */}
-            <div className="mt-6 text-center">
+            <div className="mt-8 text-center">
               <p className="text-sm text-gray-600">
-                Não tem uma conta?{" "}
-                <Link href="/register" className="text-purple-600 hover:text-purple-800 hover:underline font-medium" style={{color: '#642CA9'}}>
-                  Cadastre-se aqui
+                Não tem conta?{" "}
+                <Link href="/register" className="text-purple-600 hover:text-purple-700 font-medium">
+                  Cadastre-se aqui!
                 </Link>
               </p>
             </div>

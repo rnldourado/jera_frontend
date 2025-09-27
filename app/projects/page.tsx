@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -19,117 +19,270 @@ import {
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { CalendarDays, Users, Plus, Search, Filter, MoreHorizontal } from "lucide-react"
+import { CalendarDays, Users, Plus, Search, Filter, MoreHorizontal, Pencil, Trash2, Eye } from "lucide-react"
 import { Sidebar } from "@/components/sidebar"
 import { ProtectedPage } from "@/components/protected-page"
+import { useProjects, useApi, useUserProjects } from "@/hooks/use-api"
+import { useAuth } from "@/hooks/use-auth"
+import { apiClient } from "@/lib/api"
+import type { Project, CreateProjectRequest, Task } from "@/lib/types"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 
 export default function ProjectsPage() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [searchTerm, setSearchTerm] = useState("")
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
+  const [selectedProject, setSelectedProject] = useState<Project | null>(null)
+  const [isCreating, setIsCreating] = useState(false)
+  const [createFormData, setCreateFormData] = useState<CreateProjectRequest>({
+    name: '',
+    description: '',
+    status: 'to do',
+    startDate: '',
+    deadline: '',
+    creatorId: 1
+  })
 
-  const projects = [
-    {
-      id: 1,
-      name: "Sistema E-commerce",
-      description: "Desenvolvimento de plataforma completa de e-commerce com painel administrativo",
-      status: "Em Andamento",
-      progress: 75,
-      startDate: "2024-01-15",
-      endDate: "2024-02-15",
-      priority: "Alta",
-      team: [
-        { name: "João Silva", avatar: "/placeholder.svg?height=32&width=32" },
-        { name: "Maria Santos", avatar: "/placeholder.svg?height=32&width=32" },
-        { name: "Pedro Costa", avatar: "/placeholder.svg?height=32&width=32" },
-      ],
-      tasksTotal: 45,
-      tasksCompleted: 34,
-    },
-    {
-      id: 2,
-      name: "App Mobile",
-      description: "Aplicativo mobile para iOS e Android com funcionalidades de delivery",
-      status: "Em Andamento",
-      progress: 45,
-      startDate: "2024-01-20",
-      endDate: "2024-03-01",
-      priority: "Média",
-      team: [
-        { name: "Ana Lima", avatar: "/placeholder.svg?height=32&width=32" },
-        { name: "Carlos Oliveira", avatar: "/placeholder.svg?height=32&width=32" },
-      ],
-      tasksTotal: 32,
-      tasksCompleted: 14,
-    },
-    {
-      id: 3,
-      name: "Dashboard Analytics",
-      description: "Dashboard para análise de dados e relatórios em tempo real",
-      status: "Planejamento",
-      progress: 20,
-      startDate: "2024-02-01",
-      endDate: "2024-02-28",
-      priority: "Baixa",
-      team: [
-        { name: "Roberto Silva", avatar: "/placeholder.svg?height=32&width=32" },
-        { name: "Fernanda Costa", avatar: "/placeholder.svg?height=32&width=32" },
-        { name: "Lucas Santos", avatar: "/placeholder.svg?height=32&width=32" },
-        { name: "Juliana Lima", avatar: "/placeholder.svg?height=32&width=32" },
-      ],
-      tasksTotal: 28,
-      tasksCompleted: 6,
-    },
-    {
-      id: 4,
-      name: "Sistema CRM",
-      description: "Customer Relationship Management para gestão de clientes e vendas",
-      status: "Concluído",
-      progress: 100,
-      startDate: "2023-11-01",
-      endDate: "2024-01-10",
-      priority: "Alta",
-      team: [
-        { name: "Marcos Pereira", avatar: "/placeholder.svg?height=32&width=32" },
-        { name: "Carla Rodrigues", avatar: "/placeholder.svg?height=32&width=32" },
-      ],
-      tasksTotal: 52,
-      tasksCompleted: 52,
-    },
-  ]
+  const { user } = useAuth() || { user: null } // Fallback caso useAuth falhe
+  const { data: projects, loading, error, refetch } = useUserProjects(user?.id || null)
 
-  const getPriorityColor = (priority: string) => {
+  // Hook para buscar tarefas de cada projeto
+  const [projectTasks, setProjectTasks] = useState<Record<number, Task[]>>({})
+
+  useEffect(() => {
+    if (projects && projects.length > 0) {
+      // Buscar tarefas para cada projeto
+      const loadProjectTasks = async () => {
+        const tasksMap: Record<number, Task[]> = {}
+        
+        for (const project of projects) {
+          try {
+            const tasks = await apiClient.getTasksByProject(project.id)
+            tasksMap[project.id] = tasks
+          } catch (error) {
+            console.error(`Erro ao carregar tarefas do projeto ${project.id}:`, error)
+            tasksMap[project.id] = []
+          }
+        }
+        
+        setProjectTasks(tasksMap)
+      }
+
+      loadProjectTasks()
+    }
+  }, [projects])
+
+  useEffect(() => {
+    // Definir o creatorId, usando ID 1 como fallback se não houver usuário logado
+    setCreateFormData(prev => ({ 
+      ...prev, 
+      creatorId: user?.id || 1 
+    }))
+  }, [user])
+
+  const handleCreateProject = async () => {
+    // Validações básicas
+    if (!createFormData.name.trim()) {
+      alert('Nome do projeto é obrigatório')
+      return
+    }
+    
+    if (!createFormData.description.trim()) {
+      alert('Descrição do projeto é obrigatória')
+      return
+    }
+    
+    if (!createFormData.startDate) {
+      alert('Data de início é obrigatória')
+      return
+    }
+    
+    if (!createFormData.deadline) {
+      alert('Prazo final é obrigatório')
+      return
+    }
+
+    // Se não há usuário logado, usar um ID padrão temporário
+    const projectData = {
+      ...createFormData,
+      creatorId: user?.id || 1 // Usar ID 1 como fallback
+    }
+
+    setIsCreating(true)
+    try {
+      console.log('Enviando dados do projeto:', projectData)
+      const newProject = await apiClient.createProject(projectData)
+      console.log('Projeto criado com sucesso:', newProject)
+      
+      setIsCreateDialogOpen(false)
+      setCreateFormData({
+        name: '',
+        description: '',
+        status: 'to do',
+        startDate: '',
+        deadline: '',
+        creatorId: user?.id || 1
+      })
+      refetch()
+      alert('Projeto criado com sucesso!')
+    } catch (error) {
+      console.error('Erro ao criar projeto:', error)
+      const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido'
+      alert(`Erro ao criar projeto: ${errorMessage}`)
+    } finally {
+      setIsCreating(false)
+    }
+  }
+
+  const handleEditProject = async () => {
+    if (!selectedProject) return
+
+    try {
+      await apiClient.updateProject(selectedProject.id, createFormData)
+      setIsEditDialogOpen(false)
+      setSelectedProject(null)
+      refetch()
+    } catch (error) {
+      console.error('Erro ao editar projeto:', error)
+      alert('Erro ao editar projeto. Tente novamente.')
+    }
+  }
+
+  const handleDeleteProject = async (projectId: number) => {
+    try {
+      await apiClient.deleteProject(projectId)
+      refetch()
+    } catch (error) {
+      console.error('Erro ao deletar projeto:', error)
+      alert('Erro ao deletar projeto. Tente novamente.')
+    }
+  }
+
+  const openEditDialog = (project: Project) => {
+    setSelectedProject(project)
+    setCreateFormData({
+      name: project.name,
+      description: project.description,
+      status: project.status,
+      startDate: project.startDate,
+      deadline: project.deadline,
+      creatorId: project.creatorId
+    })
+    setIsEditDialogOpen(true)
+  }
+
+  const getPriorityColor = (priority: 'low' | 'medium' | 'high') => {
     switch (priority) {
-      case "Alta":
+      case "high":
         return "bg-red-100 text-red-800"
-      case "Média":
+      case "medium":
         return "bg-yellow-100 text-yellow-800"
-      case "Baixa":
+      case "low":
         return "bg-green-100 text-green-800"
       default:
         return "bg-gray-100 text-gray-800"
     }
   }
 
-  const getStatusColor = (status: string) => {
+  const getStatusColor = (status: 'to do' | 'in progress' | 'done') => {
     switch (status) {
-      case "Concluído":
+      case "done":
         return "bg-green-100 text-green-800"
-      case "Em Andamento":
+      case "in progress":
         return "bg-blue-100 text-blue-800"
-      case "Planejamento":
+      case "to do":
         return "bg-purple-100 text-purple-800"
-      case "Pausado":
-        return "bg-gray-100 text-gray-800"
       default:
         return "bg-gray-100 text-gray-800"
     }
   }
 
-  const filteredProjects = projects.filter(
+  const getStatusLabel = (status: 'to do' | 'in progress' | 'done') => {
+    switch (status) {
+      case "done":
+        return "Concluído"
+      case "in progress":
+        return "Em Andamento"
+      case "to do":
+        return "A Fazer"
+      default:
+        return status
+    }
+  }
+
+  const getPriorityLabel = (priority: 'low' | 'medium' | 'high') => {
+    switch (priority) {
+      case "high":
+        return "Alta"
+      case "medium":
+        return "Média"
+      case "low":
+        return "Baixa"
+      default:
+        return priority
+    }
+  }
+
+  const calculateProgress = (tasks: Task[]) => {
+    if (!tasks || tasks.length === 0) return 0
+    const completedTasks = tasks.filter(task => task.status === 'done').length
+    return Math.round((completedTasks / tasks.length) * 100)
+  }
+
+  const filteredProjects = projects?.filter(
     (project) =>
       project.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       project.description.toLowerCase().includes(searchTerm.toLowerCase()),
-  )
+  ) || []
+
+  if (loading) {
+    return (
+      <ProtectedPage>
+        <div className="flex h-screen bg-gray-50">
+          <Sidebar open={sidebarOpen} setOpen={setSidebarOpen} />
+          <div className="flex-1 flex items-center justify-center">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600"></div>
+              <p className="mt-4 text-gray-600">Carregando projetos...</p>
+            </div>
+          </div>
+        </div>
+      </ProtectedPage>
+    )
+  }
+
+  if (error) {
+    return (
+      <ProtectedPage>
+        <div className="flex h-screen bg-gray-50">
+          <Sidebar open={sidebarOpen} setOpen={setSidebarOpen} />
+          <div className="flex-1 flex items-center justify-center">
+            <div className="text-center">
+              <p className="text-red-600 mb-4">Erro ao carregar projetos: {error}</p>
+              <Button onClick={refetch}>Tentar novamente</Button>
+            </div>
+          </div>
+        </div>
+      </ProtectedPage>
+    )
+  }
 
   return (
     <ProtectedPage>
@@ -141,10 +294,15 @@ export default function ProjectsPage() {
             <div className="container mx-auto px-6 py-8">
               <div className="flex justify-between items-center mb-8">
                 <div>
-                  <h1 className="text-3xl font-bold text-gray-900">Projetos</h1>
-                  <p className="text-gray-600 mt-2">Gerencie todos os seus projetos</p>
+                  <h1 className="text-3xl font-bold text-gray-900">Meus Projetos</h1>
+                  <p className="text-gray-600 mt-2">Gerencie todos os seus projetos criados</p>
+                  {user && (
+                    <p className="text-sm text-blue-600 mt-1">
+                      Exibindo projetos criados por {user.name || user.email}
+                    </p>
+                  )}
                 </div>
-                <Dialog>
+                <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
                   <DialogTrigger asChild>
                     <Button>
                       <Plus className="h-4 w-4 mr-2" />
@@ -159,34 +317,69 @@ export default function ProjectsPage() {
                     <div className="grid gap-4 py-4">
                       <div className="grid gap-2">
                         <Label htmlFor="name">Nome do Projeto</Label>
-                        <Input id="name" placeholder="Digite o nome do projeto" />
+                        <Input 
+                          id="name" 
+                          placeholder="Digite o nome do projeto" 
+                          value={createFormData.name}
+                          onChange={(e) => setCreateFormData(prev => ({ ...prev, name: e.target.value }))}
+                        />
                       </div>
                       <div className="grid gap-2">
                         <Label htmlFor="description">Descrição</Label>
-                        <Textarea id="description" placeholder="Descreva o projeto" />
+                        <Textarea 
+                          id="description" 
+                          placeholder="Descreva o projeto" 
+                          value={createFormData.description}
+                          onChange={(e) => setCreateFormData(prev => ({ ...prev, description: e.target.value }))}
+                        />
                       </div>
                       <div className="grid grid-cols-2 gap-4">
                         <div className="grid gap-2">
-                          <Label htmlFor="priority">Prioridade</Label>
-                          <Select>
+                          <Label htmlFor="status">Status</Label>
+                          <Select 
+                            value={createFormData.status} 
+                            onValueChange={(value: 'to do' | 'in progress' | 'done') => 
+                              setCreateFormData(prev => ({ ...prev, status: value }))
+                            }
+                          >
                             <SelectTrigger>
                               <SelectValue placeholder="Selecione" />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="alta">Alta</SelectItem>
-                              <SelectItem value="media">Média</SelectItem>
-                              <SelectItem value="baixa">Baixa</SelectItem>
+                              <SelectItem value="to do">A Fazer</SelectItem>
+                              <SelectItem value="in progress">Em Andamento</SelectItem>
+                              <SelectItem value="done">Concluído</SelectItem>
                             </SelectContent>
                           </Select>
                         </div>
                         <div className="grid gap-2">
-                          <Label htmlFor="deadline">Prazo</Label>
-                          <Input id="deadline" type="date" />
+                          <Label htmlFor="startDate">Data de Início</Label>
+                          <Input 
+                            id="startDate" 
+                            type="date" 
+                            value={createFormData.startDate}
+                            onChange={(e) => setCreateFormData(prev => ({ ...prev, startDate: e.target.value }))}
+                          />
                         </div>
+                      </div>
+                      <div className="grid gap-2">
+                        <Label htmlFor="deadline">Prazo Final</Label>
+                        <Input 
+                          id="deadline" 
+                          type="date" 
+                          value={createFormData.deadline}
+                          onChange={(e) => setCreateFormData(prev => ({ ...prev, deadline: e.target.value }))}
+                        />
                       </div>
                     </div>
                     <DialogFooter>
-                      <Button type="submit">Criar Projeto</Button>
+                      <Button 
+                        type="submit" 
+                        onClick={handleCreateProject}
+                        disabled={isCreating}
+                      >
+                        {isCreating ? 'Criando...' : 'Criar Projeto'}
+                      </Button>
                     </DialogFooter>
                   </DialogContent>
                 </Dialog>
@@ -211,81 +404,197 @@ export default function ProjectsPage() {
 
               {/* Projects Grid */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {filteredProjects.map((project) => (
-                  <Card key={project.id} className="hover:shadow-lg transition-shadow">
-                    <CardHeader>
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <CardTitle className="text-lg">{project.name}</CardTitle>
-                          <CardDescription className="mt-2 line-clamp-2">{project.description}</CardDescription>
+                {filteredProjects.map((project) => {
+                  const tasks = projectTasks[project.id] || []
+                  const progress = calculateProgress(tasks)
+                  const completedTasks = tasks.filter(task => task.status === 'done').length
+                  
+                  return (
+                    <Card key={project.id} className="hover:shadow-lg transition-shadow">
+                      <CardHeader>
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <CardTitle className="text-lg">{project.name}</CardTitle>
+                            <CardDescription className="mt-2 line-clamp-2">{project.description}</CardDescription>
+                          </div>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon">
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={() => console.log('Ver projeto', project.id)}>
+                                <Eye className="h-4 w-4 mr-2" />
+                                Ver detalhes
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => openEditDialog(project)}>
+                                <Pencil className="h-4 w-4 mr-2" />
+                                Editar
+                              </DropdownMenuItem>
+                              <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                  <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
+                                    <Trash2 className="h-4 w-4 mr-2" />
+                                    Excluir
+                                  </DropdownMenuItem>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                    <AlertDialogTitle>Confirmar exclusão</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                      Tem certeza que deseja excluir o projeto "{project.name}"? 
+                                      Esta ação não pode ser desfeita.
+                                    </AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                    <AlertDialogAction 
+                                      onClick={() => handleDeleteProject(project.id)}
+                                      className="bg-red-600 hover:bg-red-700"
+                                    >
+                                      Excluir
+                                    </AlertDialogAction>
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                         </div>
-                        <Button variant="ghost" size="icon">
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="space-y-4">
-                        {/* Status and Priority */}
-                        <div className="flex items-center justify-between">
-                          <Badge className={getStatusColor(project.status)}>{project.status}</Badge>
-                          <Badge className={getPriorityColor(project.priority)}>{project.priority}</Badge>
-                        </div>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-4">
+                          {/* Status */}
+                          <div className="flex items-center justify-between">
+                            <Badge className={getStatusColor(project.status)}>
+                              {getStatusLabel(project.status)}
+                            </Badge>
+                          </div>
 
-                        {/* Progress */}
-                        <div className="space-y-2">
-                          <div className="flex justify-between text-sm">
-                            <span>Progresso</span>
-                            <span>{project.progress}%</span>
+                          {/* Progress */}
+                          <div className="space-y-2">
+                            <div className="flex justify-between text-sm">
+                              <span>Progresso</span>
+                              <span>{progress}%</span>
+                            </div>
+                            <Progress value={progress} className="h-2" />
+                            <div className="text-xs text-gray-500">
+                              {completedTasks} de {tasks.length} tarefas concluídas
+                            </div>
                           </div>
-                          <Progress value={project.progress} className="h-2" />
-                          <div className="text-xs text-gray-500">
-                            {project.tasksCompleted} de {project.tasksTotal} tarefas concluídas
-                          </div>
-                        </div>
 
-                        {/* Team */}
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <Users className="h-4 w-4 text-gray-500" />
-                            <span className="text-sm text-gray-600">Equipe</span>
+                          {/* Dates */}
+                          <div className="flex items-center justify-between text-sm text-gray-600">
+                            <div className="flex items-center gap-1">
+                              <CalendarDays className="h-4 w-4" />
+                              <span>Início: {new Date(project.startDate).toLocaleDateString("pt-BR")}</span>
+                            </div>
                           </div>
-                          <div className="flex -space-x-2">
-                            {project.team.slice(0, 3).map((member, index) => (
-                              <Avatar key={index} className="h-6 w-6 border-2 border-white">
-                                <AvatarImage src={member.avatar || "/placeholder.svg"} />
-                                <AvatarFallback className="text-xs">
-                                  {member.name
-                                    .split(" ")
-                                    .map((n) => n[0])
-                                    .join("")}
-                                </AvatarFallback>
-                              </Avatar>
-                            ))}
-                            {project.team.length > 3 && (
-                              <div className="h-6 w-6 rounded-full bg-gray-100 border-2 border-white flex items-center justify-center">
-                                <span className="text-xs text-gray-600">+{project.team.length - 3}</span>
-                              </div>
-                            )}
+                          <div className="text-sm text-gray-600">
+                            Prazo: {new Date(project.deadline).toLocaleDateString("pt-BR")}
                           </div>
                         </div>
-
-                        {/* Dates */}
-                        <div className="flex items-center justify-between text-sm text-gray-600">
-                          <div className="flex items-center gap-1">
-                            <CalendarDays className="h-4 w-4" />
-                            <span>Início: {new Date(project.startDate).toLocaleDateString("pt-BR")}</span>
-                          </div>
-                          <div>Fim: {new Date(project.endDate).toLocaleDateString("pt-BR")}</div>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
+                      </CardContent>
+                    </Card>
+                  )
+                })}
               </div>
+
+              {filteredProjects.length === 0 && !loading && (
+                <div className="text-center py-12">
+                  <p className="text-gray-500 text-lg">
+                    {searchTerm ? "Nenhum projeto encontrado com esse termo" : "Você ainda não criou nenhum projeto"}
+                  </p>
+                  <p className="text-gray-400 mt-2">
+                    {searchTerm ? "Tente ajustar sua busca" : "Crie seu primeiro projeto para começar a organizar seu trabalho"}
+                  </p>
+                  {!searchTerm && (
+                    <Button onClick={() => setIsCreateDialogOpen(true)} className="mt-4">
+                      <Plus className="h-4 w-4 mr-2" />
+                      Criar Primeiro Projeto
+                    </Button>
+                  )}
+                </div>
+              )}
             </div>
           </main>
         </div>
+
+        {/* Dialog de Edição */}
+        <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+          <DialogContent className="sm:max-w-[425px]">
+            <DialogHeader>
+              <DialogTitle>Editar Projeto</DialogTitle>
+              <DialogDescription>Atualize as informações do projeto</DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+              <div className="grid gap-2">
+                <Label htmlFor="edit-name">Nome do Projeto</Label>
+                <Input 
+                  id="edit-name" 
+                  placeholder="Digite o nome do projeto" 
+                  value={createFormData.name}
+                  onChange={(e) => setCreateFormData(prev => ({ ...prev, name: e.target.value }))}
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="edit-description">Descrição</Label>
+                <Textarea 
+                  id="edit-description" 
+                  placeholder="Descreva o projeto" 
+                  value={createFormData.description}
+                  onChange={(e) => setCreateFormData(prev => ({ ...prev, description: e.target.value }))}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="edit-status">Status</Label>
+                  <Select 
+                    value={createFormData.status} 
+                    onValueChange={(value: 'to do' | 'in progress' | 'done') => 
+                      setCreateFormData(prev => ({ ...prev, status: value }))
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="to do">A Fazer</SelectItem>
+                      <SelectItem value="in progress">Em Andamento</SelectItem>
+                      <SelectItem value="done">Concluído</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="edit-startDate">Data de Início</Label>
+                  <Input 
+                    id="edit-startDate" 
+                    type="date" 
+                    value={createFormData.startDate}
+                    onChange={(e) => setCreateFormData(prev => ({ ...prev, startDate: e.target.value }))}
+                  />
+                </div>
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="edit-deadline">Prazo Final</Label>
+                <Input 
+                  id="edit-deadline" 
+                  type="date" 
+                  value={createFormData.deadline}
+                  onChange={(e) => setCreateFormData(prev => ({ ...prev, deadline: e.target.value }))}
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>
+                Cancelar
+              </Button>
+              <Button onClick={handleEditProject}>
+                Salvar Alterações
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </ProtectedPage>
   )

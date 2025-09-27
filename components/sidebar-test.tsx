@@ -1,7 +1,6 @@
 "use client"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
-import { useEffect } from "react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -22,15 +21,20 @@ const navigation = [
   { name: "Configurações", href: "/settings", icon: Settings },
 ]
 
-export function Sidebar({ open, setOpen }: SidebarProps) {
+export function SidebarTest({ open, setOpen }: SidebarProps) {
   const pathname = usePathname()
   const router = useRouter()
-  const { user, logout, isLoading, refreshUser } = useAuth()
+  const { user, logout } = useAuth()
 
-  // Forçar refresh dos dados do usuário quando a sidebar monta
-  useEffect(() => {
-    refreshUser()
-  }, [])
+  // Dados de teste hardcoded
+  const testUser = {
+    id: 1,
+    name: "João da Silva",
+    username: "joao.silva",
+    email: "joao.silva@example.com"
+  }
+
+  const displayUser = user || testUser
 
   const handleLogout = async () => {
     try {
@@ -38,7 +42,6 @@ export function Sidebar({ open, setOpen }: SidebarProps) {
       router.push("/login")
     } catch (error) {
       console.error('Erro ao fazer logout:', error)
-      // Mesmo com erro, redirect para login
       router.push("/login")
     }
   }
@@ -97,58 +100,30 @@ export function Sidebar({ open, setOpen }: SidebarProps) {
 
           {/* User Profile */}
           <div className="p-4 border-t border-gray-200">
-            {isLoading ? (
-              <div className="flex items-center gap-3 mb-3">
-                <Avatar className="h-10 w-10">
-                  <AvatarFallback className="bg-gray-100 text-gray-400">
-                    ...
-                  </AvatarFallback>
-                </Avatar>
-                <div className="flex-1 min-w-0">
-                  <div className="h-4 bg-gray-200 rounded animate-pulse mb-1"></div>
-                  <div className="h-3 bg-gray-100 rounded animate-pulse"></div>
-                </div>
+            <div className="flex items-center gap-3 mb-3">
+              <Avatar className="h-10 w-10">
+                <AvatarImage src="/placeholder.svg?height=40&width=40" />
+                <AvatarFallback className="bg-purple-100 text-purple-700 font-semibold">
+                  {displayUser?.name ? getUserInitials(displayUser.name) : displayUser?.email ? displayUser.email.charAt(0).toUpperCase() : "U"}
+                </AvatarFallback>
+              </Avatar>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-gray-900 truncate">
+                  {displayUser?.name || "Usuário"}
+                </p>
+                <p className="text-xs text-gray-500 truncate">
+                  {displayUser?.email || "email@example.com"}
+                </p>
+                <p className="text-xs text-blue-500 truncate">
+                  Status: {user ? "Logado via Auth" : "Dados de Teste"}
+                </p>
               </div>
-            ) : user ? (
-              <div className="flex items-center gap-3 mb-3">
-                <Avatar className="h-10 w-10">
-                  <AvatarImage src="/placeholder.svg?height=40&width=40" />
-                  <AvatarFallback className="bg-purple-100 text-purple-700 font-semibold">
-                    {user.name ? getUserInitials(user.name) : user.email ? user.email.charAt(0).toUpperCase() : "U"}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-900 truncate">
-                    {user.name || user.email}
-                  </p>
-                  <p className="text-xs text-gray-500 truncate">
-                    {user.email}
-                  </p>
-                </div>
-              </div>
-            ) : (
-              <div className="flex items-center gap-3 mb-3">
-                <Avatar className="h-10 w-10">
-                  <AvatarFallback className="bg-gray-100 text-gray-400">
-                    ?
-                  </AvatarFallback>
-                </Avatar>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-900 truncate">
-                    Não logado
-                  </p>
-                  <p className="text-xs text-gray-500 truncate">
-                    Faça login
-                  </p>
-                </div>
-              </div>
-            )}
+            </div>
             <Button
               variant="outline"
               size="sm"
               onClick={handleLogout}
               className="w-full text-gray-600 hover:text-red-600 hover:border-red-300 justify-center gap-2"
-              disabled={isLoading}
             >
               <LogOut className="h-4 w-4" />
               Sair

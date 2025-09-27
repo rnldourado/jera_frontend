@@ -7,27 +7,24 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Checkbox } from "@/components/ui/checkbox"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Eye, EyeOff, User, Mail, AlertCircle, Loader2, ArrowLeft } from "lucide-react"
+import { Eye, EyeOff, User, Mail, AlertCircle, Loader2, ArrowLeft, UserCheck } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
+import { apiClient } from "@/lib/api"
+import type { CreateUserRequest } from "@/lib/types"
 
 export default function RegisterPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
-  const [acceptTerms, setAcceptTerms] = useState(false)
   const [error, setError] = useState("")
   const [formData, setFormData] = useState({
-    firstName: "",
-    lastName: "",
+    name: "",
+    username: "",
     email: "",
     password: "",
     confirmPassword: "",
-    department: "",
-    role: "",
   })
 
   const router = useRouter()
@@ -41,24 +38,20 @@ export default function RegisterPage() {
     if (error) setError("")
   }
 
-  const handleSelectChange = (name: string, value: string) => {
-    setFormData((prev) => ({
-      ...prev,
-      [name]: value,
-    }))
-    if (error) setError("")
-  }
-
   const validateForm = () => {
-    if (!formData.firstName) {
+    if (!formData.name.trim()) {
       setError("Nome é obrigatório")
       return false
     }
-    if (!formData.lastName) {
-      setError("Sobrenome é obrigatório")
+    if (!formData.username.trim()) {
+      setError("Nome de usuário é obrigatório")
       return false
     }
-    if (!formData.email) {
+    if (formData.username.length < 3) {
+      setError("Nome de usuário deve ter pelo menos 3 caracteres")
+      return false
+    }
+    if (!formData.email.trim()) {
       setError("Email é obrigatório")
       return false
     }
@@ -78,18 +71,6 @@ export default function RegisterPage() {
       setError("Senhas não coincidem")
       return false
     }
-    if (!formData.department) {
-      setError("Departamento é obrigatório")
-      return false
-    }
-    if (!formData.role) {
-      setError("Cargo é obrigatório")
-      return false
-    }
-    if (!acceptTerms) {
-      setError("Você deve aceitar os termos de uso")
-      return false
-    }
     return true
   }
 
@@ -102,74 +83,92 @@ export default function RegisterPage() {
     setError("")
 
     try {
-      // Simular chamada de API
-      await new Promise((resolve) => setTimeout(resolve, 2000))
+      const userData: CreateUserRequest = {
+        name: formData.name.trim(),
+        username: formData.username.trim().toLowerCase(),
+        email: formData.email.trim().toLowerCase(),
+        password: formData.password,
+      }
 
-      // Simular cadastro bem-sucedido
+      await apiClient.createUser(userData)
+
+      // Redirect to login with success message
       router.push("/login?message=Conta criada com sucesso! Faça login para continuar.")
     } catch (err) {
-      setError("Erro ao criar conta. Tente novamente.")
+      setError(err instanceof Error ? err.message : "Erro ao criar conta. Tente novamente.")
     } finally {
       setIsLoading(false)
     }
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-[#E5E5E5] flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         {/* Header */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-600 rounded-full mb-4">
+          <div className="inline-flex items-center justify-center w-16 h-16 bg-purple-600 rounded-full mb-4">
             <User className="h-8 w-8 text-white" />
           </div>
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">ProjectHub</h1>
-          <p className="text-gray-600">Crie sua conta para começar</p>
+          <h1 className="text-4xl font-black text-gray-900 mb-3">Jera</h1>
+          <p className="text-gray-600 text-base">Crie sua conta para começar</p>
         </div>
 
-        <Card className="shadow-lg border-0">
-          <CardHeader className="space-y-1 pb-6">
-            <CardTitle className="text-2xl font-bold text-center">Criar Conta</CardTitle>
-            <CardDescription className="text-center">Preencha seus dados para se cadastrar</CardDescription>
+        <Card className="shadow-sm border-0 bg-white">
+          <CardHeader className="text-center pb-6">
+            <CardTitle className="text-2xl font-bold text-gray-900">Criar Conta</CardTitle>
+            <CardDescription className="text-gray-600 mt-2">Preencha seus dados para se cadastrar</CardDescription>
           </CardHeader>
-          <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-4">
+          <CardContent className="px-8 pb-8">
+            <form onSubmit={handleSubmit} className="space-y-6">
               {/* Error Alert */}
               {error && (
-                <Alert variant="destructive">
+                <Alert variant="destructive" className="border-red-200 bg-red-50">
                   <AlertCircle className="h-4 w-4" />
-                  <AlertDescription>{error}</AlertDescription>
+                  <AlertDescription className="text-red-800">{error}</AlertDescription>
                 </Alert>
               )}
 
-              {/* Name Fields */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="firstName">Nome</Label>
+              {/* Name Field */}
+              <div className="space-y-2">
+                <Label htmlFor="name" className="text-sm font-medium text-gray-700">
+                  Nome Completo
+                </Label>
+                <Input
+                  id="name"
+                  name="name"
+                  placeholder="João Silva"
+                  value={formData.name}
+                  onChange={handleInputChange}
+                  className="h-12 border-gray-200 focus:border-gray-300 focus:ring-1 focus:ring-gray-300"
+                  disabled={isLoading}
+                />
+              </div>
+
+              {/* Username Field */}
+              <div className="space-y-2">
+                <Label htmlFor="username" className="text-sm font-medium text-gray-700">
+                  Nome de Usuário
+                </Label>
+                <div className="relative">
+                  <UserCheck className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
                   <Input
-                    id="firstName"
-                    name="firstName"
-                    placeholder="João"
-                    value={formData.firstName}
+                    id="username"
+                    name="username"
+                    placeholder="joaosilva"
+                    value={formData.username}
                     onChange={handleInputChange}
+                    className="h-12 pl-10 border-gray-200 focus:border-gray-300 focus:ring-1 focus:ring-gray-300"
                     disabled={isLoading}
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="lastName">Sobrenome</Label>
-                  <Input
-                    id="lastName"
-                    name="lastName"
-                    placeholder="Silva"
-                    value={formData.lastName}
-                    onChange={handleInputChange}
-                    disabled={isLoading}
-                  />
-                </div>
+                <p className="text-xs text-gray-500">Mínimo 3 caracteres, apenas letras, números e underscore</p>
               </div>
 
               {/* Email Field */}
               <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
+                <Label htmlFor="email" className="text-sm font-medium text-gray-700">
+                  Email
+                </Label>
                 <div className="relative">
                   <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
                   <Input
@@ -179,45 +178,17 @@ export default function RegisterPage() {
                     placeholder="seu@email.com"
                     value={formData.email}
                     onChange={handleInputChange}
-                    className="pl-10"
+                    className="h-12 pl-10 border-gray-200 focus:border-gray-300 focus:ring-1 focus:ring-gray-300"
                     disabled={isLoading}
                   />
                 </div>
               </div>
 
-              {/* Department and Role */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="department">Departamento</Label>
-                  <Select onValueChange={(value) => handleSelectChange("department", value)} disabled={isLoading}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="tecnologia">Tecnologia</SelectItem>
-                      <SelectItem value="design">Design</SelectItem>
-                      <SelectItem value="produto">Produto</SelectItem>
-                      <SelectItem value="qualidade">Qualidade</SelectItem>
-                      <SelectItem value="marketing">Marketing</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="role">Cargo</Label>
-                  <Input
-                    id="role"
-                    name="role"
-                    placeholder="Ex: Desenvolvedor"
-                    value={formData.role}
-                    onChange={handleInputChange}
-                    disabled={isLoading}
-                  />
-                </div>
-              </div>
-
-              {/* Password Fields */}
+              {/* Password Field */}
               <div className="space-y-2">
-                <Label htmlFor="password">Senha</Label>
+                <Label htmlFor="password" className="text-sm font-medium text-gray-700">
+                  Senha
+                </Label>
                 <div className="relative">
                   <Input
                     id="password"
@@ -226,7 +197,7 @@ export default function RegisterPage() {
                     placeholder="Mínimo 6 caracteres"
                     value={formData.password}
                     onChange={handleInputChange}
-                    className="pr-10"
+                    className="h-12 pr-10 border-gray-200 focus:border-gray-300 focus:ring-1 focus:ring-gray-300"
                     disabled={isLoading}
                   />
                   <button
@@ -240,8 +211,11 @@ export default function RegisterPage() {
                 </div>
               </div>
 
+              {/* Confirm Password Field */}
               <div className="space-y-2">
-                <Label htmlFor="confirmPassword">Confirmar Senha</Label>
+                <Label htmlFor="confirmPassword" className="text-sm font-medium text-gray-700">
+                  Confirmar Senha
+                </Label>
                 <div className="relative">
                   <Input
                     id="confirmPassword"
@@ -250,7 +224,7 @@ export default function RegisterPage() {
                     placeholder="Digite a senha novamente"
                     value={formData.confirmPassword}
                     onChange={handleInputChange}
-                    className="pr-10"
+                    className="h-12 pr-10 border-gray-200 focus:border-gray-300 focus:ring-1 focus:ring-gray-300"
                     disabled={isLoading}
                   />
                   <button
@@ -264,28 +238,12 @@ export default function RegisterPage() {
                 </div>
               </div>
 
-              {/* Terms Checkbox */}
-              <div className="flex items-start space-x-2">
-                <Checkbox
-                  id="terms"
-                  checked={acceptTerms}
-                  onCheckedChange={(checked) => setAcceptTerms(checked as boolean)}
-                  disabled={isLoading}
-                />
-                <Label htmlFor="terms" className="text-sm text-gray-600 leading-5">
-                  Eu aceito os{" "}
-                  <Link href="/terms" className="text-blue-600 hover:text-blue-800 hover:underline">
-                    Termos de Uso
-                  </Link>{" "}
-                  e a{" "}
-                  <Link href="/privacy" className="text-blue-600 hover:text-blue-800 hover:underline">
-                    Política de Privacidade
-                  </Link>
-                </Label>
-              </div>
-
               {/* Register Button */}
-              <Button type="submit" className="w-full" disabled={isLoading}>
+              <Button
+                type="submit"
+                className="w-full h-12 bg-black hover:bg-gray-800 text-white font-medium rounded-lg"
+                disabled={isLoading}
+              >
                 {isLoading ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -298,10 +256,10 @@ export default function RegisterPage() {
             </form>
 
             {/* Footer Links */}
-            <div className="mt-6 text-center">
+            <div className="mt-8 text-center">
               <p className="text-sm text-gray-600">
                 Já tem uma conta?{" "}
-                <Link href="/login" className="text-blue-600 hover:text-blue-800 hover:underline font-medium">
+                <Link href="/login" className="text-purple-600 hover:text-purple-700 font-medium">
                   Faça login aqui
                 </Link>
               </p>
